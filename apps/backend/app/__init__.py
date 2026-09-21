@@ -1,0 +1,3 @@
+"""StoryForge Backend Sidecar Application."""
+
+__version__ = "0.1.0"

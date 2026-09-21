@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+env/
+venv/
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Rust / Tauri build artifacts
+src-tauri/target/
+target/
+
+# StoryForge runtime & sensitive files
+runtime.json
+**/runtime.json
+*.storyforge/
+storage/
+**/storage/
+*.sqlite
+*.sqlite3
+*.db
+test_ar.mp3
+.env
+.env.local
+.env.*.local
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
