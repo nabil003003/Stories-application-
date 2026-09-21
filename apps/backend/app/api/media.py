@@ -473,3 +473,78 @@ async def serve_thumbnail(video_id: str) -> Response:
             headers={"Cache-Control": "public, max-age=86400"}
         )
     raise HTTPException(status_code=404, detail="Thumbnail not found")
+
+
+# ══════════════════════════════════════════════════════════════
+# FREE AI SCENE ART GENERATION (FLUX.1 via Pollinations.ai)
+# ══════════════════════════════════════════════════════════════
+
+SCENES_DIR = Path(__file__).resolve().parent.parent.parent / "storage" / "media" / "scenes"
+SCENES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+class GenerateSceneRequest(BaseModel):
+    prompt: str
+    aspect_ratio: str = "9:16"
+
+
+@router.post("/generate-scene")
+async def generate_ai_scene(
+    payload: GenerateSceneRequest,
+    _token: Annotated[str, Depends(verify_bearer_token)],
+) -> dict[str, Any]:
+    """Generate free high-resolution cinematic story scene using Pollinations.ai FLUX.1.
+    Zero API key, 100% free and instant.
+    """
+    import time
+    import urllib.parse
+    import uuid
+
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Scene prompt is required.")
+
+    is_vertical = payload.aspect_ratio == "9:16"
+    width, height = (720, 1280) if is_vertical else (1280, 720)
+    enhanced_prompt = f"{prompt}, cinematic lighting, photorealistic, 8k resolution, dramatic atmosphere, vertical 9:16 portrait composition"
+
+    encoded_prompt = urllib.parse.quote(enhanced_prompt)
+    pollinations_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={width}&height={height}&model=flux&nologo=true&seed={uuid.uuid4().int % 1000000}"
+
+    scene_id = f"scene-ai-{uuid.uuid4().hex[:8]}"
+    out_file = SCENES_DIR / f"{scene_id}.jpg"
+
+    try:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            resp = await client.get(pollinations_url)
+            if resp.status_code == 200 and len(resp.content) > 1000:
+                out_file.write_bytes(resp.content)
+            else:
+                raise HTTPException(status_code=502, detail=f"Image provider returned status {resp.status_code}")
+    except Exception as e:
+        print(f"[Media] AI Scene Generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Scene generation failed: {str(e)}")
+
+    return {
+        "id": scene_id,
+        "title": prompt[:40],
+        "image_url": f"/api/media/scene/{scene_id}",
+        "aspect_ratio": payload.aspect_ratio,
+        "width": width,
+        "height": height,
+        "created_at": time.time(),
+    }
+
+
+@router.get("/scene/{scene_id}")
+async def serve_generated_scene(scene_id: str) -> Response:
+    """Serve a locally cached AI-generated scene image."""
+    target_file = SCENES_DIR / f"{scene_id}.jpg"
+    if target_file.exists():
+        return FileResponse(
+            target_file,
+            media_type="image/jpeg",
+            filename=f"{scene_id}.jpg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    raise HTTPException(status_code=404, detail="Scene image not found")

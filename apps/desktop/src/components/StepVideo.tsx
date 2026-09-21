@@ -33,6 +33,7 @@ import {
   updateExistingProject,
   fetchProjectList,
   LineTimingPayload,
+  generateAIScene,
 } from "../services/projectService";
 
 interface StepVideoProps {
@@ -181,12 +182,21 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
   const [pitchOffset, setPitchOffset] = useState<number>(0);
   const [rateOffset, setRateOffset] = useState<number>(0);
   const [isPreviewingVoice, setIsPreviewingVoice] = useState(false);
-  const [voiceLangFilter, setVoiceLangFilter] = useState<"matching" | "all" | "en" | "ar" | "fr">("matching");
+  const [voiceLangFilter, setVoiceLangFilter] = useState<"matching" | "all" | "en" | "ar" | "fr" | "iconic">("matching");
 
   // Side video clips list search and filters
   const [selectedTheme, setSelectedTheme] = useState<string>("all");
   const [videoSearch, setVideoSearch] = useState<string>("");
   const [draggedVideoId, setDraggedVideoId] = useState<string | null>(null);
+
+  // Free AI Scene Art Generation (Pollinations.ai / FLUX.1)
+  const [isAiSceneModalOpen, setIsAiSceneModalOpen] = useState(false);
+  const [aiScenePrompt, setAiScenePrompt] = useState("");
+  const [isGeneratingAiScene, setIsGeneratingAiScene] = useState(false);
+
+  // Video Resolution from store (Default 720p fast, or 1080p full HD)
+  const videoResolution = useStudioStore((s) => s.videoResolution) || "720p";
+  const setVideoResolution = useStudioStore((s) => s.setVideoResolution);
 
   // Export states
   const [isExportingAudio, setIsExportingAudio] = useState(false);
@@ -690,6 +700,28 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
     }
   };
 
+  // Free AI Scene Generation (Pollinations.ai / FLUX.1)
+  const handleGenerateAiScene = async () => {
+    if (!aiScenePrompt.trim()) return;
+    setIsGeneratingAiScene(true);
+    setExportFeedback("🎨 Painting 9:16 cinematic artwork with FLUX.1 (100% Free)...");
+    try {
+      const scene = await generateAIScene(aiScenePrompt.trim(), videoAspectRatio);
+      const targetId = currentPlayingLine.id;
+      assignVideoToLine(targetId, scene.id);
+      setSelectedVideoId(scene.id);
+      setVideoSequence([...videoSequence, scene.id]);
+      setExportFeedback(`✨ Generated AI Scene and assigned to active story beat!`);
+      setIsAiSceneModalOpen(false);
+      setAiScenePrompt("");
+    } catch (err: unknown) {
+      setExportFeedback(err instanceof Error ? err.message : "Scene generation failed");
+    } finally {
+      setIsGeneratingAiScene(false);
+      setTimeout(() => setExportFeedback(null), 4000);
+    }
+  };
+
   // Music Adjustment Toggles ("add music, delete music")
   const handleDeleteMusic = () => {
     setBackgroundTrack("none");
@@ -828,7 +860,8 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
         videoSequence,
         videoAspectRatio,
         true,
-        measuredList
+        measuredList,
+        videoResolution
       );
       setExportFeedback("🎉 Production Video Exported Successfully (.mp4)!");
     } catch (err: unknown) {
@@ -874,36 +907,71 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
           </span>
         </div>
 
-        {/* Format Selector: TikTok Form (9:16) vs Landscape (16:9) */}
-        <div className="flex items-center space-x-2 p-1 rounded-xl" style={{ background: "var(--bg-elevated)" }}>
-          <button
-            type="button"
-            id="format-tiktok"
-            onClick={() => setVideoAspectRatio("9:16")}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
-            style={{
-              background: videoAspectRatio === "9:16" ? "var(--gold)" : "transparent",
-              color: videoAspectRatio === "9:16" ? "#ffffff" : "var(--fg-muted)",
-              boxShadow: videoAspectRatio === "9:16" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
-            }}
-          >
-            <span>📱</span>
-            <span>TikTok / Reels (9:16)</span>
-          </button>
-          <button
-            type="button"
-            id="format-widescreen"
-            onClick={() => setVideoAspectRatio("16:9")}
-            className="px-3.5 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
-            style={{
-              background: videoAspectRatio === "16:9" ? "var(--gold)" : "transparent",
-              color: videoAspectRatio === "16:9" ? "#ffffff" : "var(--fg-muted)",
-              boxShadow: videoAspectRatio === "16:9" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
-            }}
-          >
-            <span>🖥️</span>
-            <span>Landscape (16:9)</span>
-          </button>
+        {/* Controls: Aspect Ratio & Export Resolution (720p vs 1080p) */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Format Selector */}
+          <div className="flex items-center space-x-1 p-1 rounded-xl" style={{ background: "var(--bg-elevated)" }}>
+            <button
+              type="button"
+              id="format-tiktok"
+              onClick={() => setVideoAspectRatio("9:16")}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
+              style={{
+                background: videoAspectRatio === "9:16" ? "var(--gold)" : "transparent",
+                color: videoAspectRatio === "9:16" ? "#ffffff" : "var(--fg-muted)",
+                boxShadow: videoAspectRatio === "9:16" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
+              }}
+            >
+              <span>📱</span>
+              <span>TikTok (9:16)</span>
+            </button>
+            <button
+              type="button"
+              id="format-widescreen"
+              onClick={() => setVideoAspectRatio("16:9")}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
+              style={{
+                background: videoAspectRatio === "16:9" ? "var(--gold)" : "transparent",
+                color: videoAspectRatio === "16:9" ? "#ffffff" : "var(--fg-muted)",
+                boxShadow: videoAspectRatio === "16:9" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
+              }}
+            >
+              <span>🖥️</span>
+              <span>16:9</span>
+            </button>
+          </div>
+
+          {/* Resolution Selector: 720p (Fast) vs 1080p (HQ) */}
+          <div className="flex items-center space-x-1 p-1 rounded-xl" style={{ background: "var(--bg-elevated)" }}>
+            <button
+              type="button"
+              id="res-720p"
+              onClick={() => setVideoResolution("720p")}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1 transition-all cursor-pointer"
+              style={{
+                background: videoResolution === "720p" ? "var(--gold)" : "transparent",
+                color: videoResolution === "720p" ? "#ffffff" : "var(--fg-muted)",
+                boxShadow: videoResolution === "720p" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
+              }}
+            >
+              <span>⚡</span>
+              <span>720p (Fast)</span>
+            </button>
+            <button
+              type="button"
+              id="res-1080p"
+              onClick={() => setVideoResolution("1080p")}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-bold flex items-center space-x-1 transition-all cursor-pointer"
+              style={{
+                background: videoResolution === "1080p" ? "var(--gold)" : "transparent",
+                color: videoResolution === "1080p" ? "#ffffff" : "var(--fg-muted)",
+                boxShadow: videoResolution === "1080p" ? "0 2px 10px rgba(143,105,27,0.3)" : "none",
+              }}
+            >
+              <span>💎</span>
+              <span>1080p (HQ)</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -929,6 +997,38 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
             <span className="text-[10px] text-amber-400 font-bold px-1.5 py-0.5 rounded bg-amber-400/10 border border-amber-400/20">
               Drag & Drop
             </span>
+          </div>
+
+          {/* Action buttons: Free AI Scene & Auto Match */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAiSceneModalOpen(true)}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+              style={{
+                background: "linear-gradient(135deg, rgba(143,105,27,0.35), rgba(200,150,40,0.18))",
+                border: "1px solid var(--gold)",
+                color: "var(--fg-primary)",
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5" style={{ color: "var(--gold)" }} />
+              <span>Free AI Scene</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleAutoMatchVisuals}
+              disabled={isAutoMatching}
+              className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center space-x-1 transition-all cursor-pointer"
+              style={{
+                background: "var(--bg-elevated)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--fg-secondary)",
+              }}
+            >
+              <Wand2 className="w-3.5 h-3.5" style={{ color: "var(--gold)" }} />
+              <span>Auto-Match</span>
+            </button>
           </div>
 
           {/* Search bar */}
@@ -1753,6 +1853,18 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
                 </button>
                 <button
                   type="button"
+                  onClick={() => setVoiceLangFilter("iconic")}
+                  className="px-2 py-0.5 rounded font-bold transition-all cursor-pointer whitespace-nowrap"
+                  style={{
+                    background: voiceLangFilter === "iconic" ? "var(--gold)" : "var(--bg-elevated)",
+                    color: voiceLangFilter === "iconic" ? "#ffffff" : "var(--fg-secondary)",
+                    border: "1px solid var(--border-subtle)",
+                  }}
+                >
+                  🎭 Iconic & Meme (5)
+                </button>
+                <button
+                  type="button"
                   onClick={() => setVoiceLangFilter("all")}
                   className="px-2 py-0.5 rounded font-bold transition-all cursor-pointer whitespace-nowrap"
                   style={{
@@ -1761,7 +1873,7 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
                     border: "1px solid var(--border-subtle)",
                   }}
                 >
-                  All (52)
+                  All ({CATALOG_VOICES.length})
                 </button>
               </div>
 
@@ -1776,11 +1888,22 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
                 }}
               >
                 {/* Specific Language Selected */}
-                {voiceLangFilter !== "all" && voiceLangFilter !== "matching" && (
+                {voiceLangFilter !== "all" && voiceLangFilter !== "matching" && voiceLangFilter !== "iconic" && (
                   <optgroup label={`${voiceLangFilter.toUpperCase()} Studio Neural Voices`}>
                     {CATALOG_VOICES.filter((v) => v.lang === voiceLangFilter).map((voice) => (
                       <option key={voice.id} value={voice.id}>
                         {voice.flagEmoji} {voice.name} — {voice.gender} • {voice.style} ({voice.region})
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+
+                {/* Iconic & Meme Selected */}
+                {voiceLangFilter === "iconic" && (
+                  <optgroup label="🎭 Iconic & Meme Voices (Pop-Culture & Sci-Fi)">
+                    {CATALOG_VOICES.filter((v) => v.category === "Iconic & Meme").map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.flagEmoji} {voice.name} — {voice.gender} • {voice.style}
                       </option>
                     ))}
                   </optgroup>
@@ -1800,9 +1923,16 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
                     {voiceLangFilter === "all" && (
                       <>
                         <optgroup label="🇺🇸 🇬🇧 🇦🇺 English Studio Readers">
-                          {CATALOG_VOICES.filter((v) => v.lang === "en" && v.lang !== primaryLang).map((voice) => (
+                          {CATALOG_VOICES.filter((v) => v.lang === "en" && v.lang !== primaryLang && v.category !== "Iconic & Meme").map((voice) => (
                             <option key={voice.id} value={voice.id}>
                               {voice.flagEmoji} {voice.name} — {voice.gender} • {voice.style} ({voice.region})
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="🎭 Iconic & Meme Character Voices">
+                          {CATALOG_VOICES.filter((v) => v.category === "Iconic & Meme").map((voice) => (
+                            <option key={voice.id} value={voice.id}>
+                              {voice.flagEmoji} {voice.name} — {voice.gender} • {voice.style}
                             </option>
                           ))}
                         </optgroup>
@@ -1994,6 +2124,37 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
               {isExportingAudio && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
             </button>
 
+            {/* Resolution Selector: 720p (Fast) vs 1080p (HQ) */}
+            <div className="flex items-center justify-between p-2 rounded-lg" style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}>
+              <span className="text-[11px] font-bold" style={{ color: "var(--fg-secondary)" }}>
+                Export Quality:
+              </span>
+              <div className="flex items-center space-x-1">
+                <button
+                  type="button"
+                  onClick={() => setVideoResolution("720p")}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer"
+                  style={{
+                    background: videoResolution === "720p" ? "var(--gold)" : "transparent",
+                    color: videoResolution === "720p" ? "#ffffff" : "var(--fg-muted)",
+                  }}
+                >
+                  ⚡ 720p (Fast)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVideoResolution("1080p")}
+                  className="px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer"
+                  style={{
+                    background: videoResolution === "1080p" ? "var(--gold)" : "transparent",
+                    color: videoResolution === "1080p" ? "#ffffff" : "var(--fg-muted)",
+                  }}
+                >
+                  💎 1080p (HQ)
+                </button>
+              </div>
+            </div>
+
             {/* 3. Full Production MP4 Video Export (Entire Video) */}
             <button
               type="button"
@@ -2014,13 +2175,87 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
               ) : (
                 <>
                   <Video className="w-4 h-4" />
-                  <span>Export Entire Video (.mp4)</span>
+                  <span>Export Entire Video ({videoResolution})</span>
                 </>
               )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Free AI Scene Generation Modal (Pollinations.ai / FLUX.1) */}
+      {isAiSceneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-md p-5 rounded-2xl space-y-4 shadow-2xl"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1px solid var(--gold)",
+              boxShadow: "0 8px 32px rgba(143,105,27,0.25)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-5 h-5" style={{ color: "var(--gold)" }} />
+                <h3 className="font-bold text-[15px]" style={{ color: "var(--fg-primary)" }}>
+                  Generate Free AI Scene (FLUX.1)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAiSceneModalOpen(false)}
+                className="text-stone-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-[12px]" style={{ color: "var(--fg-secondary)" }}>
+              Describe the setting or character shot you want FLUX to create for this scene (100% Free, Instant):
+            </p>
+
+            <textarea
+              rows={3}
+              value={aiScenePrompt}
+              onChange={(e) => setAiScenePrompt(e.target.value)}
+              placeholder="e.g. Peter Griffin exploring a neon cyberpunk street at night, cinematic 9:16 portrait..."
+              className="w-full p-2.5 rounded-xl text-[12px] bg-black/40 border border-stone-700 text-white outline-none focus:border-amber-500"
+            />
+
+            <div className="flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => setIsAiSceneModalOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg text-[12px] font-medium text-stone-400 hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateAiScene}
+                disabled={isGeneratingAiScene || !aiScenePrompt.trim()}
+                className="px-4 py-2 rounded-xl text-[12px] font-bold flex items-center space-x-1.5 text-white cursor-pointer"
+                style={{
+                  background: "var(--gold)",
+                  boxShadow: "0 2px 10px rgba(143,105,27,0.3)",
+                }}
+              >
+                {isGeneratingAiScene ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Painting Scene with FLUX...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Generate Artwork</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation Footer */}
       <div className="pt-4 flex justify-between items-center" style={{ borderTop: "1px solid var(--border-subtle)" }}>

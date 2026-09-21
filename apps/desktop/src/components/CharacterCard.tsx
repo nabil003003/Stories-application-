@@ -99,22 +99,33 @@ export function CharacterCard({
               charLang as "ar" | "en" | "fr",
               ...(["ar", "en", "fr"] as const).filter((l) => l !== charLang),
             ];
-            return orderedLangs.map((langKey) => (
-              <optgroup
-                key={langKey}
-                label={
-                  langKey === charLang
-                    ? `⭐ ${langLabels[langKey]} (Selected Language)`
-                    : langLabels[langKey]
-                }
-              >
-                {CATALOG_VOICES.filter((v) => v.lang === langKey).map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.flagEmoji} {v.name} — {v.gender} • {v.style} ({v.region})
-                  </option>
+            return (
+              <>
+                <optgroup label="🎭 Iconic & Meme Voices (Peter G, Bob Sponge, Vader, Rick)">
+                  {CATALOG_VOICES.filter((v) => v.category === "Iconic & Meme").map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.flagEmoji} {v.name} — {v.style}
+                    </option>
+                  ))}
+                </optgroup>
+                {orderedLangs.map((langKey) => (
+                  <optgroup
+                    key={langKey}
+                    label={
+                      langKey === charLang
+                        ? `⭐ ${langLabels[langKey]} (Selected Language)`
+                        : langLabels[langKey]
+                    }
+                  >
+                    {CATALOG_VOICES.filter((v) => v.lang === langKey && v.category !== "Iconic & Meme").map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.flagEmoji} {v.name} — {v.gender} • {v.style} ({v.region})
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            ));
+              </>
+            );
           })()}
         </select>
       </div>

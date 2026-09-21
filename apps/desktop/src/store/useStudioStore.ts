@@ -100,6 +100,8 @@ export interface StudioState {
   // Video Captions & Styling
   videoAspectRatio: "9:16" | "16:9";
   setVideoAspectRatio: (r: "9:16" | "16:9") => void;
+  videoResolution: "720p" | "1080p";
+  setVideoResolution: (res: "720p" | "1080p") => void;
   selectedVideoId: string;
   setSelectedVideoId: (id: string) => void;
   videoSequence: string[];
@@ -350,6 +352,8 @@ export const useStudioStore = create<StudioState>()(
   // Video Captions & Styling
   videoAspectRatio: "9:16",
   setVideoAspectRatio: (videoAspectRatio) => set({ videoAspectRatio }),
+  videoResolution: "720p",
+  setVideoResolution: (videoResolution) => set({ videoResolution }),
   selectedVideoId: "vid-desert-01",
   setSelectedVideoId: (selectedVideoId) => set({ selectedVideoId }),
   videoSequence: ["vid-desert-01", "vid-war-01"],
@@ -446,6 +450,7 @@ export const useStudioStore = create<StudioState>()(
         backgroundTrack: state.backgroundTrack,
         musicVolume: state.musicVolume,
         videoAspectRatio: state.videoAspectRatio,
+        videoResolution: state.videoResolution,
         selectedVideoId: state.selectedVideoId,
         subtitleStyle: state.subtitleStyle,
         wordsPerFrame: state.wordsPerFrame,

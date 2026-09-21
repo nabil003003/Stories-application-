@@ -1,4 +1,5 @@
-from typing import Annotated
+import contextlib
+from typing import Annotated, Any
 
 import edge_tts
 from fastapi import APIRouter, Depends, Query, Response
@@ -51,12 +52,54 @@ AVAILABLE_VOICES: list[dict[str, str]] = [
     {"id": "fr-CA-AntoineNeural", "name": "Antoine", "lang": "fr", "gender": "Male", "style": "Deep & Resonant Canadian French", "flag": "CA", "region": "Canada"},
     {"id": "fr-CA-SylvieNeural", "name": "Sylvie", "lang": "fr", "gender": "Female", "style": "Warm Canadian Storyteller", "flag": "CA", "region": "Canada"},
     {"id": "fr-BE-GerardNeural", "name": "Gérard", "lang": "fr", "gender": "Male", "style": "Authoritative Belgian French", "flag": "BE", "region": "Belgium"},
+
+    # ══════════════════════════════════════════════════════════════
+    # 4. ICONIC & CARTOON/MEME CHARACTER VOICES (Expressive Formant-Adapted)
+    # ══════════════════════════════════════════════════════════════
+    {"id": "char-peter-griffin", "name": "Peter G. (Quahog Dad)", "lang": "en", "gender": "Male", "style": "Comedic Nasal Dad", "flag": "US", "region": "Iconic Cartoon"},
+    {"id": "char-spongebob", "name": "Bob Sponge (Pineapple Energy)", "lang": "en", "gender": "Male", "style": "High-Pitched Cartoon Excitement", "flag": "US", "region": "Iconic Cartoon"},
+    {"id": "char-dark-overlord", "name": "Dark Overlord (Vader)", "lang": "en", "gender": "Male", "style": "Deep Sub-Bass Menace & Sith Lord", "flag": "US", "region": "Sci-Fi Villain"},
+    {"id": "char-mad-scientist", "name": "Mad Scientist (Rick)", "lang": "en", "gender": "Male", "style": "Cynical Erratic Staccato Genius", "flag": "US", "region": "Sci-Fi Cartoon"},
+    {"id": "char-film-noir", "name": "Detective Noir (Gritty)", "lang": "en", "gender": "Male", "style": "Raspy Whisper & Gritty Monologue", "flag": "US", "region": "Film Noir"},
 ]
 
 DEFAULT_VOICE_MAP: dict[str, str] = {
     "ar": "ar-SA-HamedNeural",
     "en": "en-US-ChristopherNeural",
     "fr": "fr-FR-HenriNeural",
+}
+
+CHARACTER_VOICE_PROFILES: dict[str, dict[str, Any]] = {
+    "char-peter-griffin": {
+        "base_voice": "en-US-GuyNeural",
+        "rate_offset": 8,
+        "pitch_offset": 14,
+        "volume_offset": 10,
+    },
+    "char-spongebob": {
+        "base_voice": "en-US-AnaNeural",
+        "rate_offset": 18,
+        "pitch_offset": 28,
+        "volume_offset": 15,
+    },
+    "char-dark-overlord": {
+        "base_voice": "en-US-ChristopherNeural",
+        "rate_offset": -10,
+        "pitch_offset": -22,
+        "volume_offset": 20,
+    },
+    "char-mad-scientist": {
+        "base_voice": "en-US-GuyNeural",
+        "rate_offset": 14,
+        "pitch_offset": 10,
+        "volume_offset": 8,
+    },
+    "char-film-noir": {
+        "base_voice": "en-US-RogerNeural",
+        "rate_offset": -14,
+        "pitch_offset": -6,
+        "volume_offset": -8,
+    },
 }
 
 # Reading Style Profiles: Adapts prosody, pacing, pitch, and acoustic volume delivery
@@ -237,46 +280,60 @@ def compute_acoustic_params(
     custom_volume: str | None,
 ) -> tuple[str, str, str]:
     """Combines style profile with custom fine-tuning offsets."""
+    _, r, p, v = resolve_voice_and_acoustics(
+        None, style_id, custom_rate, custom_pitch, custom_volume
+    )
+    return r, p, v
+
+
+def resolve_voice_and_acoustics(
+    requested_voice: str | None,
+    style_id: str | None,
+    custom_rate: str | None = None,
+    custom_pitch: str | None = None,
+    custom_volume: str | None = None,
+    language: str = "en",
+) -> tuple[str, str, str, str]:
+    """Resolves character presets and computes final acoustic parameters."""
     rate_val = 0
     pitch_val = 0
     volume_val = 0
 
-    # 1. Start with style profile base
+    actual_voice = requested_voice or DEFAULT_VOICE_MAP.get(
+        language.lower(),
+        "ar-SA-HamedNeural" if language.lower() == "ar" else "en-US-ChristopherNeural",
+    )
+
+    # 1. Apply Character Preset if selected
+    if requested_voice and requested_voice in CHARACTER_VOICE_PROFILES:
+        c_prof = CHARACTER_VOICE_PROFILES[requested_voice]
+        actual_voice = c_prof["base_voice"]
+        rate_val += c_prof["rate_offset"]
+        pitch_val += c_prof["pitch_offset"]
+        volume_val += c_prof["volume_offset"]
+
+    # 2. Apply Style Profile
     if style_id and style_id in STYLE_LOOKUP:
         profile = STYLE_LOOKUP[style_id]
-        # parse rate (e.g. "-8%")
         r_str = profile.get("rate", "0%").replace("%", "")
-        rate_val = int(r_str) if r_str else 0
-
+        rate_val += int(r_str) if r_str else 0
         p_str = profile.get("pitch", "0Hz").replace("Hz", "")
-        pitch_val = int(p_str) if p_str else 0
-
+        pitch_val += int(p_str) if p_str else 0
         v_str = profile.get("volume", "0%").replace("%", "")
-        volume_val = int(v_str) if v_str else 0
+        volume_val += int(v_str) if v_str else 0
 
-    # 2. Add custom rate adjustment if passed (e.g. "+10%")
+    # 3. Apply custom fine-tuning offsets
     if custom_rate:
-        try:
-            cr = int(custom_rate.replace("%", ""))
-            rate_val += cr
-        except ValueError:
-            pass
+        with contextlib.suppress(ValueError):
+            rate_val += int(custom_rate.replace("%", ""))
 
-    # 3. Add custom pitch adjustment if passed (e.g. "-5Hz")
     if custom_pitch:
-        try:
-            cp = int(custom_pitch.replace("Hz", ""))
-            pitch_val += cp
-        except ValueError:
-            pass
+        with contextlib.suppress(ValueError):
+            pitch_val += int(custom_pitch.replace("Hz", ""))
 
-    # 4. Add custom volume adjustment if passed
     if custom_volume:
-        try:
-            cv = int(custom_volume.replace("%", ""))
-            volume_val += cv
-        except ValueError:
-            pass
+        with contextlib.suppress(ValueError):
+            volume_val += int(custom_volume.replace("%", ""))
 
     # Clamp ranges to safe edge-tts limits
     rate_val = max(-50, min(100, rate_val))
@@ -287,7 +344,23 @@ def compute_acoustic_params(
     final_pitch = f"{'+' if pitch_val >= 0 else ''}{pitch_val}Hz"
     final_volume = f"{'+' if volume_val >= 0 else ''}{volume_val}%"
 
-    return final_rate, final_pitch, final_volume
+    return actual_voice, final_rate, final_pitch, final_volume
+
+
+def preprocess_emotional_text(raw_text: str, language: str = "en") -> str:
+    """Normalize text and add natural pauses for emotional drama."""
+    import re
+    if not raw_text:
+        return ""
+    # Convert ellipses into speech pause spacing
+    t = re.sub(r"\.{3,}", " ... ", raw_text)
+    # Add spacing around exclamation marks and question marks to induce emotional release
+    t = re.sub(r"([!?]+)", r" \1 ", t)
+    # Convert consecutive newlines to periods for natural speech pauses
+    t = re.sub(r"[\r\n]+", " . ", t)
+    # Collapse multiple consecutive spaces or tabs into a single space
+    t = re.sub(r"[ \t]+", " ", t).strip()
+    return t
 
 
 @router.get("/voices")
@@ -308,20 +381,11 @@ async def synthesize_speech(
     _token: Annotated[str, Depends(verify_bearer_token)],
 ) -> Response:
     """Synthesize text into studio-grade neural speech audio with adapted reading style."""
-    import re
-
-    voice = req.voice or DEFAULT_VOICE_MAP.get(req.language.lower(), "ar-SA-HamedNeural" if req.language == "ar" else "en-US-ChristopherNeural")
-
-    rate, pitch, volume = compute_acoustic_params(
-        req.style, req.rate, req.pitch, req.volume
+    actual_voice, rate, pitch, volume = resolve_voice_and_acoustics(
+        req.voice, req.style, req.rate, req.pitch, req.volume, req.language
     )
 
-    # Robust text normalization: handle any form of text (spaces, newlines, tabs, symbols)
-    raw_text = req.text or ""
-    # Convert consecutive newlines to periods for natural speech pauses
-    normalized_text = re.sub(r"[\r\n]+", " . ", raw_text)
-    # Collapse multiple consecutive spaces or tabs into a single space
-    normalized_text = re.sub(r"[ \t]+", " ", normalized_text).strip()
+    normalized_text = preprocess_emotional_text(req.text or "", req.language)
 
     # If empty or only whitespace, provide a clear, helpful spoken placeholder
     if not normalized_text:
@@ -336,7 +400,7 @@ async def synthesize_speech(
     try:
         communicate = edge_tts.Communicate(
             normalized_text,
-            voice,
+            actual_voice,
             rate=rate,
             pitch=pitch,
             volume=volume,
@@ -346,8 +410,11 @@ async def synthesize_speech(
                 audio_data.extend(chunk["data"])
     except Exception as e:
         # Fallback to default voice if specific voice failed
-        fallback_voice = DEFAULT_VOICE_MAP.get(req.language.lower(), "ar-SA-HamedNeural" if req.language == "ar" else "en-US-ChristopherNeural")
-        if voice != fallback_voice:
+        fallback_voice = DEFAULT_VOICE_MAP.get(
+            req.language.lower(),
+            "ar-SA-HamedNeural" if req.language == "ar" else "en-US-ChristopherNeural",
+        )
+        if actual_voice != fallback_voice:
             communicate = edge_tts.Communicate(
                 normalized_text,
                 fallback_voice,
@@ -390,27 +457,18 @@ async def synthesize_speech_with_timing(
 ) -> TimedSynthesisResponse:
     """Synthesize speech and return both audio data (base64) and exact word boundary timestamps."""
     import base64
-    import re
 
-    voice = req.voice or DEFAULT_VOICE_MAP.get(
-        req.language.lower(),
-        "ar-SA-HamedNeural" if req.language == "ar" else "en-US-ChristopherNeural",
+    actual_voice, rate, pitch, volume = resolve_voice_and_acoustics(
+        req.voice, req.style, req.rate, req.pitch, req.volume, req.language
     )
 
-    rate, pitch, volume = compute_acoustic_params(
-        req.style, req.rate, req.pitch, req.volume
-    )
-
-    raw_text = req.text or ""
-    normalized_text = re.sub(r"[\r\n]+", " . ", raw_text)
-    normalized_text = re.sub(r"[ \t]+", " ", normalized_text).strip()
-
+    normalized_text = preprocess_emotional_text(req.text or "", req.language)
     if not normalized_text:
         normalized_text = "..."
 
     communicate = edge_tts.Communicate(
         normalized_text,
-        voice,
+        actual_voice,
         rate=rate,
         pitch=pitch,
         volume=volume,
@@ -447,18 +505,21 @@ async def stream_speech(
     token: str = Query(..., description="Bearer session token"),
 ) -> Response:
     """Stream speech via GET for audio tag playback."""
-    from app.core.config import settings
     import secrets
+
+    from app.core.config import settings
 
     if not secrets.compare_digest(token, settings.SESSION_TOKEN):
         return Response(status_code=401, content="Unauthorized")
 
-    chosen_voice = voice or DEFAULT_VOICE_MAP.get(language.lower(), "en-US-ChristopherNeural")
-    rate, pitch, volume = compute_acoustic_params(style, None, None, None)
+    actual_voice, rate, pitch, volume = resolve_voice_and_acoustics(
+        voice, style, None, None, None, language
+    )
+    normalized_text = preprocess_emotional_text(text, language)
 
     communicate = edge_tts.Communicate(
-        text,
-        chosen_voice,
+        normalized_text,
+        actual_voice,
         rate=rate,
         pitch=pitch,
         volume=volume,

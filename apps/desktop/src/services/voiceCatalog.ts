@@ -13,7 +13,7 @@ export interface VoiceInfo {
   flag: string;
   flagEmoji: string;
   region: string;
-  category: "Narrator" | "Dramatic" | "Warm" | "Documentary" | "Elder" | "Youth";
+  category: "Narrator" | "Dramatic" | "Warm" | "Documentary" | "Elder" | "Youth" | "Iconic & Meme";
 }
 
 export interface ReadingStyleInfo {
@@ -92,6 +92,15 @@ export const CATALOG_VOICES: VoiceInfo[] = [
   { id: "fr-CA-JeanNeural", name: "Jean", lang: "fr", gender: "Male", style: "Authentic Québec Storyteller", flag: "CA", flagEmoji: "🇨🇦", region: "Canada", category: "Dramatic" },
   { id: "fr-BE-GerardNeural", name: "Gérard", lang: "fr", gender: "Male", style: "Authoritative Belgian French", flag: "BE", flagEmoji: "🇧🇪", region: "Belgium", category: "Documentary" },
   { id: "fr-CH-FabriceNeural", name: "Fabrice", lang: "fr", gender: "Male", style: "Articulate Swiss French", flag: "CH", flagEmoji: "🇨🇭", region: "Switzerland", category: "Narrator" },
+
+  // ═══════════════════════════════════════════════════════════════
+  // 4. ICONIC & MEME CHARACTER VOICES (Cartoon, Comedic & Sci-Fi)
+  // ═══════════════════════════════════════════════════════════════
+  { id: "char-peter-griffin", name: "Peter G.", lang: "en", gender: "Male", style: "Comedic Nasal Dad (Quahog)", flag: "US", flagEmoji: "🍺", region: "Iconic Cartoon", category: "Iconic & Meme" },
+  { id: "char-spongebob", name: "Bob Sponge", lang: "en", gender: "Male", style: "High-Pitched Cartoon Energy", flag: "US", flagEmoji: "🧽", region: "Iconic Cartoon", category: "Iconic & Meme" },
+  { id: "char-dark-overlord", name: "Dark Overlord", lang: "en", gender: "Male", style: "Deep Sub-Bass Villain & Sith", flag: "US", flagEmoji: "⚔️", region: "Sci-Fi Villain", category: "Iconic & Meme" },
+  { id: "char-mad-scientist", name: "Mad Scientist", lang: "en", gender: "Male", style: "Cynical Erratic Staccato (Rick)", flag: "US", flagEmoji: "🧪", region: "Sci-Fi Cartoon", category: "Iconic & Meme" },
+  { id: "char-film-noir", name: "Detective Noir", lang: "en", gender: "Male", style: "Raspy Whisper & Gritty Monologue", flag: "US", flagEmoji: "🕵️", region: "Film Noir", category: "Iconic & Meme" },
 ];
 
 export const CATALOG_STYLES: ReadingStyleInfo[] = [

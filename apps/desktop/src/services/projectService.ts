@@ -270,13 +270,15 @@ export async function downloadProjectVideo(
   clipIds: string[],
   aspectRatio: string = "9:16",
   burnSubtitles: boolean = true,
-  timings?: LineTimingPayload[]
+  timings?: LineTimingPayload[],
+  resolution: "720p" | "1080p" = "720p"
 ): Promise<void> {
   const res = await authFetch(`/api/exporter/projects/${projectId}/video`, {
     method: "POST",
     body: JSON.stringify({
       clip_ids: clipIds,
       aspect_ratio: aspectRatio,
+      resolution,
       burn_subtitles: burnSubtitles,
       timings: timings && timings.length > 0 ? timings : undefined,
     }),
@@ -318,4 +320,30 @@ export async function generateAiStory(prompt: string, language: string = "en", g
   }
   const data = await res.json();
   return data.script || "";
+}
+
+export interface GeneratedSceneResponse {
+  id: string;
+  title: string;
+  image_url: string;
+  aspect_ratio: string;
+  width: number;
+  height: number;
+  created_at: number;
+}
+
+export async function generateAIScene(prompt: string, aspectRatio: string = "9:16"): Promise<GeneratedSceneResponse> {
+  const res = await authFetch("/api/media/generate-scene", {
+    method: "POST",
+    body: JSON.stringify({
+      prompt,
+      aspect_ratio: aspectRatio,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "AI scene generation failed." }));
+    throw new Error(err.detail || "AI scene generation failed.");
+  }
+  return (await res.json()) as GeneratedSceneResponse;
 }
