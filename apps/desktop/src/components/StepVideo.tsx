@@ -34,6 +34,7 @@ import {
   fetchProjectList,
   LineTimingPayload,
   generateAIScene,
+  openExportFolder,
 } from "../services/projectService";
 
 interface StepVideoProps {
@@ -204,6 +205,12 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
   const [isAutoMatching, setIsAutoMatching] = useState(false);
   const [exportFeedback, setExportFeedback] = useState<string | null>(null);
   const [isExportingVideo, setIsExportingVideo] = useState(false);
+  const [exportedVideoModal, setExportedVideoModal] = useState<{
+    filename: string;
+    blobUrl: string;
+    fileSize: number;
+    durationSeconds: number;
+  } | null>(null);
 
   // Multi-Video Sequence Slots for story timeline (persisted in store)
   const videoSequence = useStudioStore((s) => s.videoSequence) || ["vid-war-01"];
@@ -854,7 +861,7 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
           end_seconds: t.end,
         })
       );
-      await downloadProjectVideo(
+      const exportRes = await downloadProjectVideo(
         targetProjectId,
         storyTitle,
         videoSequence,
@@ -864,6 +871,12 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
         videoResolution
       );
       setExportFeedback("🎉 Production Video Exported Successfully (.mp4)!");
+      setExportedVideoModal({
+        filename: exportRes.filename,
+        blobUrl: exportRes.blobUrl,
+        fileSize: exportRes.fileSize,
+        durationSeconds: exportRes.durationSeconds,
+      });
     } catch (err: unknown) {
       setExportFeedback(err instanceof Error ? err.message : "Video export failed");
     } finally {
@@ -2252,6 +2265,96 @@ export function StepVideo({ onExportVideoClick }: StepVideoProps): React.JSX.Ele
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Export Complete Modal */}
+      {exportedVideoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div
+            className="w-full max-w-md p-5 rounded-2xl space-y-4 shadow-2xl"
+            style={{
+              background: "var(--bg-surface)",
+              border: "1.5px solid var(--gold)",
+              boxShadow: "0 12px 40px rgba(143,105,27,0.35)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-bold text-base" style={{ color: "var(--fg-primary)" }}>
+                  Video Generated & Exported!
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExportedVideoModal(null)}
+                className="text-stone-400 hover:text-white text-sm cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Video Player Preview */}
+            <div className="w-full aspect-[9/16] max-h-64 rounded-xl overflow-hidden bg-black mx-auto flex items-center justify-center border border-stone-800">
+              <video
+                src={exportedVideoModal.blobUrl}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {/* File info details */}
+            <div
+              className="p-3 rounded-xl flex items-center justify-between text-xs font-mono"
+              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-subtle)" }}
+            >
+              <div className="truncate mr-2 font-bold" style={{ color: "var(--fg-primary)" }}>
+                🎬 {exportedVideoModal.filename}
+              </div>
+              <div className="shrink-0 font-bold" style={{ color: "var(--gold)" }}>
+                {(exportedVideoModal.fileSize / (1024 * 1024)).toFixed(1)} MB • {videoResolution}
+              </div>
+            </div>
+
+            {/* Actions: Open in Windows Explorer & Direct Download Link */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await openExportFolder();
+                    setExportFeedback("Opened exports folder in Windows Explorer!");
+                    setTimeout(() => setExportFeedback(null), 3000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border-subtle)",
+                  color: "var(--fg-primary)",
+                }}
+              >
+                <span>📁 Open Export Folder</span>
+              </button>
+
+              <a
+                href={exportedVideoModal.blobUrl}
+                download={exportedVideoModal.filename}
+                className="py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 text-white transition-all cursor-pointer"
+                style={{
+                  background: "var(--gold)",
+                  boxShadow: "0 2px 10px rgba(143,105,27,0.3)",
+                }}
+              >
+                <Download className="w-4 h-4" />
+                <span>Save .MP4</span>
+              </a>
             </div>
           </div>
         </div>

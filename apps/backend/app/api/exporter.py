@@ -645,12 +645,16 @@ async def export_project_video(
     temp_audio_file = EXPORTS_DIR / f"temp_{export_id}_audio.mp3"
     mixed_audio.export(str(temp_audio_file), format="mp3", bitrate="192k")
 
-    # 3. Resolve Video Clips & Calculate Equal Time Division
-    candidate_video_dirs = [
+    # 3. Resolve Video Clips & AI Scene Images
+    candidate_media_dirs = [
         Path(__file__).resolve().parent.parent.parent / "storage" / "media" / "videos",
+        Path(__file__).resolve().parent.parent.parent / "storage" / "media" / "scenes",
         Path("storage/media/videos"),
+        Path("storage/media/scenes"),
         Path("apps/backend/storage/media/videos"),
+        Path("apps/backend/storage/media/scenes"),
         Path("../storage/media/videos"),
+        Path("../storage/media/scenes"),
     ]
 
     requested_clips = [c.strip() for c in (payload.clip_ids if payload and payload.clip_ids else []) if c and c.strip()]
@@ -662,19 +666,22 @@ async def export_project_video(
     resolved_clip_paths: list[Path] = []
     for cid in requested_clips:
         found_path: Path | None = None
-        for vdir in candidate_video_dirs:
-            candidate = vdir / f"{cid}.mp4"
-            if candidate.exists() and candidate.stat().st_size > 0:
-                found_path = candidate
+        for mdir in candidate_media_dirs:
+            for ext in [".mp4", ".jpg", ".jpeg", ".png", ".webp"]:
+                candidate = mdir / f"{cid}{ext}"
+                if candidate.exists() and candidate.stat().st_size > 0:
+                    found_path = candidate
+                    break
+            if found_path:
                 break
         if found_path:
             resolved_clip_paths.append(found_path)
 
     # Fallback to any available clip if specific ones not found
     if not resolved_clip_paths:
-        for vdir in candidate_video_dirs:
-            if vdir.exists():
-                all_vids = list(vdir.glob("*.mp4"))
+        for mdir in candidate_media_dirs:
+            if mdir.exists():
+                all_vids = list(mdir.glob("*.mp4"))
                 if all_vids:
                     resolved_clip_paths = [all_vids[0]]
                     break
@@ -684,7 +691,7 @@ async def export_project_video(
             temp_audio_file.unlink(missing_ok=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No local background videos available in catalog to render.",
+            detail="No local background videos or scenes available to render.",
         )
 
     num_clips = len(resolved_clip_paths)
@@ -749,7 +756,13 @@ async def export_project_video(
 
     base_cmd = [ffmpeg_exe, "-y"]
     for cp in resolved_clip_paths:
-        base_cmd.extend(["-stream_loop", "-1", "-t", f"{clip_slot_seconds:.3f}", "-i", str(cp)])
+        is_still_image = cp.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]
+        if is_still_image:
+            # Still images require -loop 1 for infinite frames clamped by -t
+            base_cmd.extend(["-loop", "1", "-t", f"{clip_slot_seconds:.3f}", "-i", str(cp)])
+        else:
+            # Video loops use -stream_loop -1
+            base_cmd.extend(["-stream_loop", "-1", "-t", f"{clip_slot_seconds:.3f}", "-i", str(cp)])
     base_cmd.extend(["-i", str(temp_audio_file)])
 
     cmd_with_subtitles = base_cmd + [
@@ -889,3 +902,35 @@ def download_export_file(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{clean_name}"'},
     )
+
+
+@router.post("/open-folder")
+def open_exports_folder(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, str]:
+    """Open the exports directory in the native desktop file explorer."""
+    try:
+        if os.name == "nt":
+            os.startfile(str(EXPORTS_DIR.resolve()))
+        else:
+            subprocess.Popen(["xdg-open", str(EXPORTS_DIR.resolve())])
+        return {"status": "ok", "path": str(EXPORTS_DIR.resolve())}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to open folder: {e}")
+
+
+@router.post("/open-file/{filename}")
+def open_export_file_in_explorer(filename: str, user: dict[str, Any] = Depends(get_current_user)) -> dict[str, str]:
+    """Select and highlight the exported file in Windows Explorer."""
+    clean_name = Path(filename).name
+    target = EXPORTS_DIR / clean_name
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Exported file not found.")
+
+    try:
+        if os.name == "nt":
+            subprocess.Popen(f'explorer /select,"{target.resolve()}"')
+        else:
+            subprocess.Popen(["xdg-open", str(target.resolve())])
+        return {"status": "ok", "file": str(target.resolve())}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to open file: {e}")
+

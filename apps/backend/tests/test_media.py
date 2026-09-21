@@ -74,3 +74,27 @@ def test_auto_match_story() -> None:
     assert all(v["type"] == "video" for v in visuals)
     assert all("url" in v and v["motionEffect"] == "video-loop" for v in visuals)
 
+
+def test_generate_and_serve_ai_scene() -> None:
+    # 1. Generate an AI scene
+    resp = client.post(
+        "/api/media/generate-scene",
+        json={"prompt": "ancient cybernetic temple in rain", "aspect_ratio": "9:16"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    scene_id = data["id"]
+    assert scene_id.startswith("scene-ai-")
+
+    # 2. Test serving via /api/media/scene/{scene_id}
+    scene_resp = client.get(f"/api/media/scene/{scene_id}")
+    assert scene_resp.status_code == 200
+    assert "image" in scene_resp.headers.get("content-type", "")
+
+    # 3. Test serving via /api/media/local/{scene_id} (used by VideoPlayer)
+    local_resp = client.get(f"/api/media/local/{scene_id}")
+    assert local_resp.status_code == 200
+    assert "image" in local_resp.headers.get("content-type", "")
+
+

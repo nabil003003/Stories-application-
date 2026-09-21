@@ -259,6 +259,14 @@ export async function downloadProjectSubtitles(
   window.URL.revokeObjectURL(url);
 }
 
+export interface VideoExportResult {
+  exportId: string;
+  filename: string;
+  durationSeconds: number;
+  blobUrl: string;
+  fileSize: number;
+}
+
 /**
  * Render and download broadcast production MP4 video from backend.
  * Stitches chosen video clips with equal time division, mixes master audio,
@@ -272,7 +280,7 @@ export async function downloadProjectVideo(
   burnSubtitles: boolean = true,
   timings?: LineTimingPayload[],
   resolution: "720p" | "1080p" = "720p"
-): Promise<void> {
+): Promise<VideoExportResult> {
   const res = await authFetch(`/api/exporter/projects/${projectId}/video`, {
     method: "POST",
     body: JSON.stringify({
@@ -289,12 +297,17 @@ export async function downloadProjectVideo(
     throw new Error(err.detail || "Failed to render production video.");
   }
 
+  const exportId = res.headers.get("X-Export-Id") || "";
+  const durationSec = parseFloat(res.headers.get("X-Duration-Seconds") || "0");
   const blob = await res.blob();
   const url = window.URL.createObjectURL(blob);
+  const cleanTitle = (storyTitle || "StoryForge").replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, "_");
+  const filename = `${cleanTitle}_Production.mp4`;
+
+  // Trigger browser/WebView2 download
   const a = document.createElement("a");
   a.href = url;
-  const cleanTitle = (storyTitle || "StoryForge").replace(/[^a-zA-Z0-9_\u0600-\u06FF]/g, "_");
-  a.download = `${cleanTitle}_Production.mp4`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
@@ -303,8 +316,23 @@ export async function downloadProjectVideo(
     } catch {
       // ignore
     }
-    window.URL.revokeObjectURL(url);
-  }, 45000);
+  }, 1000);
+
+  return {
+    exportId,
+    filename,
+    durationSeconds: durationSec,
+    blobUrl: url,
+    fileSize: blob.size,
+  };
+}
+
+export async function openExportFolder(): Promise<void> {
+  await authFetch("/api/exporter/open-folder", { method: "POST" });
+}
+
+export async function openExportFile(filename: string): Promise<void> {
+  await authFetch(`/api/exporter/open-file/${encodeURIComponent(filename)}`, { method: "POST" });
 }
 
 /**

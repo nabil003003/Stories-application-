@@ -174,20 +174,27 @@ export function VideoPlayer({
   const currentIdx = allLines.findIndex((l) => l.id === currentPlayingLine.id);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Resolved video stream URL: Use the line's specific assigned clip, or fallback to selected project clip
+  // Resolved media stream URL: Use the line's specific assigned clip, or fallback to selected project clip
   const activeVideoId = currentPlayingLine.videoId || selectedVideoId || "vid-love-01";
-  // Use a relative URL so the request stays same-origin in both dev (Vite proxy) and Tauri production.
-  // An absolute http://127.0.0.1:8000 URL is cross-origin from tauri://localhost and causes silent failures.
-  const videoSrc = customVideoUrl || `/api/media/local/${activeVideoId}`;
+  const isImageMedia =
+    activeVideoId.startsWith("scene-") ||
+    activeVideoId.endsWith(".jpg") ||
+    activeVideoId.endsWith(".jpeg") ||
+    activeVideoId.endsWith(".png") ||
+    activeVideoId.endsWith(".webp");
+  // Use relative URL so request stays same-origin in both dev and Tauri production
+  const mediaSrc =
+    customVideoUrl ||
+    (isImageMedia ? `/api/media/scene/${activeVideoId}` : `/api/media/local/${activeVideoId}`);
 
   // Keep video playing smoothly
   useEffect(() => {
-    if (videoRef.current) {
+    if (!isImageMedia && videoRef.current) {
       videoRef.current.play().catch(() => {
         // Autoplay policy fallback
       });
     }
-  }, [videoSrc]);
+  }, [mediaSrc, isImageMedia]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -254,18 +261,28 @@ export function VideoPlayer({
         </div>
       )}
 
-      {/* 1. Real Downloaded Background Video Loop */}
-      <video
-        ref={videoRef}
-        key={videoSrc}
-        src={videoSrc}
-        autoPlay
-        loop
-        muted
-        playsInline
-        className="absolute inset-0 w-full h-full object-cover transition-all duration-700 pointer-events-none"
-        style={{ filter: "brightness(0.65) contrast(1.1)" }}
-      />
+      {/* 1. Real Downloaded Background Video Loop or AI Generated Scene Artwork */}
+      {isImageMedia ? (
+        <img
+          key={mediaSrc}
+          src={mediaSrc}
+          alt="Scene Artwork"
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-1000 pointer-events-none transform scale-105"
+          style={{ filter: "brightness(0.68) contrast(1.1)" }}
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          key={mediaSrc}
+          src={mediaSrc}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover transition-all duration-700 pointer-events-none"
+          style={{ filter: "brightness(0.65) contrast(1.1)" }}
+        />
+      )}
 
       {/* Fallback subtle dark gradient in case video is buffering */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/70 pointer-events-none" />
